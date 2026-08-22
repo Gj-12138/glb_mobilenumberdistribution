@@ -153,3 +153,34 @@ Stage Summary:
 - All existing functionality preserved (login, validation, loading state, error handling)
 - New features: password toggle, remember-me checkbox, animated background, feature highlights, entrance animations, gradient button with shine effect
 - Verified: lint clean, no console errors, desktop/mobile responsive, password toggle works, login flow works
+
+---
+Task ID: 12
+Agent: Main
+Task: 为数据添加来源标签（source tag）功能
+
+Work Log:
+- 在 Prisma schema 的 PhoneData 模型中添加了 `source String?` 字段
+- 运行 `bun run db:push` 推送数据库变更并重新生成 Prisma Client
+- 更新 TypeScript 类型：PhoneDataItem 添加 source 字段，PhoneDataListParams 添加 source 筛选参数，ImportRequest 添加 source 字段
+- 更新 API client：getPhoneData 支持 source 参数，importPhones 支持 source 参数，新增 getSourceOptions 接口
+- 更新后端 API：
+  - `/api/phone-data/import` 接受 source 字段并保存
+  - `/api/phone-data` (GET) 支持 source 查询参数筛选
+  - 新建 `/api/phone-data/sources` (GET) 返回所有不重复的非空来源标签列表
+- 更新前端 DataManage 组件：
+  - 导入对话框新增来源标签输入框
+  - 筛选栏新增来源筛选下拉框（动态获取来源列表）
+  - 数据表格新增"来源"列（紫色标签样式 + Tag 图标）
+  - 导入成功后自动刷新来源选项列表
+  - 重置筛选时清除来源筛选
+- 更新前端 MyData 组件：
+  - 数据表格新增"来源"列（与 DataManage 样式一致）
+  - 更新骨架屏列数和空数据 colSpan
+
+Stage Summary:
+- 修改文件：prisma/schema.prisma, src/types/index.ts, src/api/client.ts
+- 修改文件：src/app/api/phone-data/import/route.ts, src/app/api/phone-data/route.ts
+- 新建文件：src/app/api/phone-data/sources/route.ts
+- 修改文件：src/components/pages/DataManage.tsx, src/components/pages/MyData.tsx
+- Lint 检查通过，无错误

@@ -107,6 +107,7 @@ export const api = {
     if (params.status) searchParams.set('status', params.status)
     if (params.keyword) searchParams.set('keyword', params.keyword)
     if (params.assignedTo) searchParams.set('assignedTo', String(params.assignedTo))
+    if (params.source) searchParams.set('source', params.source)
     return request<import('@/types').PaginatedResponse<import('@/types').PhoneDataItem>>(
       `/phone-data?${searchParams.toString()}`
     )
@@ -123,10 +124,10 @@ export const api = {
     )
   },
 
-  importPhones: (phones: string[]) =>
+  importPhones: (phones: string[], source?: string) =>
     request<{ count: number }>('/phone-data/import', {
       method: 'POST',
-      body: JSON.stringify({ phones }),
+      body: JSON.stringify({ phones, source }),
     }),
 
   distributePhones: (ids: number[], assignedTo: number) =>
@@ -158,6 +159,9 @@ export const api = {
 
   deletePhoneData: (id: number) =>
     request(`/phone-data/${id}`, { method: 'DELETE' }),
+
+  getSourceOptions: () =>
+    request<string[]>('/phone-data/sources'),
 
   // Logs
   getLogs: (params: import('@/types').LogListParams) => {

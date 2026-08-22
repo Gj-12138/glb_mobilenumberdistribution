@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     const keyword = searchParams.get('keyword') || ''
     const status = searchParams.get('status') || ''
     const assignedTo = searchParams.get('assignedTo') || ''
+    const source = searchParams.get('source') || ''
     const skip = (page - 1) * pageSize
 
     const where: Record<string, unknown> = {}
@@ -34,6 +35,9 @@ export async function GET(request: Request) {
     }
     if (assignedTo) {
       where.assignedTo = Number(assignedTo)
+    }
+    if (source) {
+      where.source = source
     }
 
     const [list, total] = await Promise.all([

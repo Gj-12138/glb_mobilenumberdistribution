@@ -32,6 +32,7 @@ export interface PhoneDataItem {
   phone: string
   name: string | null
   remark: string | null
+  source: string | null
   status: PhoneStatus
   assignedTo: number | null
   assignedAt: string | null
@@ -48,10 +49,12 @@ export interface PhoneDataListParams {
   status?: PhoneStatus | ''
   keyword?: string
   assignedTo?: number | ''
+  source?: string
 }
 
 export interface ImportRequest {
   phones: string[]
+  source?: string
 }
 
 export interface DistributeRequest {

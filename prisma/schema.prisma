@@ -27,6 +27,7 @@ model PhoneData {
   phone       String
   name        String?
   remark      String?
+  source      String?
   status      String    @default("pending")
   assignedTo  Int?
   assignedAt  DateTime?

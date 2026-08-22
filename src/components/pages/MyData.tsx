@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Search, RefreshCw, Filter, ChevronLeft, ChevronRight, Phone, Clock, AlertCircle, Check } from 'lucide-react'
+import { Search, RefreshCw, Filter, ChevronLeft, ChevronRight, Phone, Clock, AlertCircle, Check, Tag } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { STATUS_LABELS, STATUS_COLORS, type PhoneStatus, type PhoneDataItem } from '@/types'
 
@@ -250,6 +250,7 @@ export function MyData() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">手机号</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">姓名</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">来源</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">状态</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">分配时间</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">跟进时间</th>
@@ -263,6 +264,7 @@ export function MyData() {
                     <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
@@ -271,7 +273,7 @@ export function MyData() {
                 ))
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-16 text-center text-muted-foreground">
                     暂无数据
                   </td>
                 </tr>
@@ -288,6 +290,13 @@ export function MyData() {
                       <span className="phone-mono text-sm">{item.phone}</span>
                     </td>
                     <td className="px-4 py-3 text-sm">{item.name || '-'}</td>
+                    <td className="px-4 py-3">
+                      {item.source ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200">
+                          <Tag className="w-3 h-3" />{item.source}
+                        </span>
+                      ) : '-'}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={STATUS_COLORS[item.status] + ' px-2.5 py-0.5 rounded-full text-xs font-medium'}>
                         {STATUS_LABELS[item.status]}

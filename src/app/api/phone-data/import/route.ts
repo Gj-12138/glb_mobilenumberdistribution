@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ code: 1, message: '无权限' }, { status: 401 })
     }
 
-    const { phones } = await request.json()
+    const { phones, source } = await request.json()
 
     if (!Array.isArray(phones) || phones.length === 0) {
       return NextResponse.json({ code: 1, message: '请提供手机号数据' })
@@ -27,12 +27,14 @@ export async function POST(request: Request) {
     const created = await db.phoneData.createMany({
       data: uniquePhones.map((phone: string) => ({
         phone,
+        source: source || null,
         status: 'pending',
         createdBy: payload.userId,
       })),
     })
 
-    await createLog(payload.userId, payload.nickname, 'import', `导入 ${created.count} 条号码数据`)
+    const sourceInfo = source ? `（来源：${source}）` : ''
+    await createLog(payload.userId, payload.nickname, 'import', `导入 ${created.count} 条号码数据${sourceInfo}`)
 
     return NextResponse.json({ code: 0, message: 'success', data: { count: created.count } })
   } catch {

@@ -14,17 +14,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ code: 1, message: '登录已过期' }, { status: 401 })
     }
 
-    const user = await db.sysUser.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, username: true, nickname: true, role: true, status: true, createdAt: true },
+    // Get distinct non-null source values
+    const results = await db.phoneData.findMany({
+      where: { source: { not: null } },
+      select: { source: true },
+      distinct: ['source'],
+      orderBy: { source: 'asc' },
     })
 
-    if (!user) {
-      return NextResponse.json({ code: 1, message: '用户不存在' }, { status: 401 })
-    }
+    const sources = results.map((r) => r.source).filter(Boolean) as string[]
 
-    return NextResponse.json({ code: 0, message: 'success', data: user })
+    return NextResponse.json({ code: 0, message: 'success', data: sources })
   } catch {
-    return NextResponse.json({ code: 1, message: '获取用户信息失败' })
+    return NextResponse.json({ code: 1, message: '获取来源列表失败' })
   }
 }

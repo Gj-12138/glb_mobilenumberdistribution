@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Upload, Search, Filter, RefreshCw, Trash2, MoreHorizontal, Plus, ArrowRightLeft, Recycle, ChevronLeft, ChevronRight, Phone, Zap, Clock, AlertCircle, Check } from 'lucide-react'
+import { Upload, Search, Filter, RefreshCw, Trash2, MoreHorizontal, Plus, ArrowRightLeft, Recycle, ChevronLeft, ChevronRight, Phone, Zap, Clock, AlertCircle, Check, Tag } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { STATUS_LABELS, STATUS_COLORS, type PhoneStatus, type PhoneDataItem } from '@/types'
 
@@ -47,17 +47,25 @@ export function DataManage() {
   const [_batchStatus, setBatchStatus] = useState<PhoneStatus>('')
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [importSource, setImportSource] = useState('')
+  const [sourceFilter, setSourceFilter] = useState('')
 
   // Fetch data
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['phoneData', page, status, keyword],
-    queryFn: () => api.getPhoneData({ page, pageSize: PAGE_SIZE, status: status || undefined, keyword: keyword || undefined }),
+    queryKey: ['phoneData', page, status, keyword, sourceFilter],
+    queryFn: () => api.getPhoneData({ page, pageSize: PAGE_SIZE, status: status || undefined, keyword: keyword || undefined, source: sourceFilter || undefined }),
   })
 
   // Fetch user options for distribute
   const { data: userOptions } = useQuery({
     queryKey: ['userOptions'],
     queryFn: () => api.getUserOptions(),
+  })
+
+  // Fetch source options for filter
+  const { data: sourceOptions } = useQuery({
+    queryKey: ['sourceOptions'],
+    queryFn: () => api.getSourceOptions(),
   })
 
   // Stats query
@@ -81,20 +89,26 @@ export function DataManage() {
 
   // Import mutation
   const importMutation = useMutation({
-    mutationFn: (phones: string[]) => api.importPhones(phones),
+    mutationFn: ({ phones, source }: { phones: string[]; source?: string }) => api.importPhones(phones, source),
     onSuccess: (res) => {
       toast({ title: '导入成功', description: `成功导入 ${res.data.count} 条数据` })
       setImportOpen(false)
       setImportText('')
       setImportParsed([])
       setImportInvalid([])
+      setImportSource('')
       queryClient.invalidateQueries({ queryKey: ['phoneData'] })
       queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+      queryClient.invalidateQueries({ queryKey: ['sourceOptions'] })
     },
     onError: (err: Error) => {
       toast({ title: '导入失败', description: err.message })
     },
   })
+
+  const handleImport = () => {
+    importMutation.mutate({ phones: importParsed, source: importSource.trim() || undefined })
+  }
 
   // Distribute mutation
   const distributeMutation = useMutation({
@@ -195,10 +209,17 @@ export function DataManage() {
     setSelected(new Set())
   }
 
+  const handleSourceFilter = (val: string) => {
+    setSourceFilter(val === '_all' ? '' : val)
+    setPage(1)
+    setSelected(new Set())
+  }
+
   const handleReset = () => {
     setStatus('')
     setKeyword('')
     setSearchInput('')
+    setSourceFilter('')
     setPage(1)
     setSelected(new Set())
   }
@@ -304,12 +325,23 @@ export function DataManage() {
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row gap-3">
             <Select value={status} onValueChange={handleStatusFilter}>
-              <SelectTrigger className="w-full sm:w-40">
+              <SelectTrigger className="w-full sm:w-36">
                 <SelectValue placeholder="全部状态" />
               </SelectTrigger>
               <SelectContent>
                 {STATUS_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value || '_all'}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sourceFilter || '_all'} onValueChange={handleSourceFilter}>
+              <SelectTrigger className="w-full sm:w-36">
+                <SelectValue placeholder="全部来源" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">全部来源</SelectItem>
+                {(sourceOptions?.data || []).map((s: string) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -335,7 +367,7 @@ export function DataManage() {
       {/* Actions bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => { setImportText(''); setImportParsed([]); setImportInvalid([]); setImportOpen(true) }}>
+          <Button onClick={() => { setImportText(''); setImportParsed([]); setImportInvalid([]); setImportSource(''); setImportOpen(true) }}>
             <Upload className="w-4 h-4 mr-1.5" />导入数据
           </Button>
           <Button variant="outline" onClick={() => autoDistributeMutation.mutate()} disabled={autoDistributeMutation.isPending}>
@@ -398,6 +430,7 @@ export function DataManage() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">手机号</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">姓名</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">来源</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">状态</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">分配给</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">分配时间</th>
@@ -412,6 +445,7 @@ export function DataManage() {
                     <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
@@ -421,7 +455,7 @@ export function DataManage() {
                 ))
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-16 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-16 text-center text-muted-foreground">
                     暂无数据
                   </td>
                 </tr>
@@ -438,6 +472,13 @@ export function DataManage() {
                       <span className="phone-mono text-sm">{item.phone}</span>
                     </td>
                     <td className="px-4 py-3 text-sm">{item.name || '-'}</td>
+                    <td className="px-4 py-3">
+                      {item.source ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200">
+                          <Tag className="w-3 h-3" />{item.source}
+                        </span>
+                      ) : '-'}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={STATUS_COLORS[item.status] + ' px-2.5 py-0.5 rounded-full text-xs font-medium'}>
                         {STATUS_LABELS[item.status]}
@@ -536,6 +577,14 @@ export function DataManage() {
             <DialogDescription>粘贴手机号，每行一个或用逗号分隔。系统将自动验证格式（11位手机号，以1开头）。</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">来源标签</label>
+              <Input
+                placeholder="请输入数据来源，如：广告投放、老客户推荐..."
+                value={importSource}
+                onChange={(e) => setImportSource(e.target.value)}
+              />
+            </div>
             <Textarea
               placeholder="请输入手机号，每行一个或逗号分隔&#10;例如：&#10;13800138000&#10;13900139000,15012345678"
               value={importText}
@@ -554,7 +603,7 @@ export function DataManage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportOpen(false)}>取消</Button>
             <Button
-              onClick={() => importMutation.mutate(importParsed)}
+              onClick={handleImport}
               disabled={importParsed.length === 0 || importMutation.isPending}
             >
               {importMutation.isPending ? '导入中...' : `确认导入 ${importParsed.length} 条`}
