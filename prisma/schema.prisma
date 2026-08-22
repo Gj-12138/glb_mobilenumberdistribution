@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model SysUser {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  nickname  String
+  role      String   @default("user")
+  status    Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phoneData     PhoneData[]
+  createdData   PhoneData[]  @relation("CreatedBy")
+  sysLogs       SysLog[]
+}
+
+model PhoneData {
+  id          Int       @id @default(autoincrement())
+  phone       String
+  name        String?
+  remark      String?
+  status      String    @default("pending")
+  assignedTo  Int?
+  assignedAt  DateTime?
+  followedUpAt DateTime?
+  createdBy   Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  assignedUser  SysUser? @relation(fields: [assignedTo], references: [id])
+  creatorUser   SysUser  @relation("CreatedBy", fields: [createdBy], references: [id])
+}
+
+model SysLog {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  userNickname String
+  operType     String
+  operContent  String?
+  operTime     DateTime @default(now())
+
+  user SysUser @relation(fields: [userId], references: [id])
+}
