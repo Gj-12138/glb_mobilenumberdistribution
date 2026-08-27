@@ -14,7 +14,7 @@ import * as XLSX from 'xlsx'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Upload, Search, Filter, RefreshCw, Trash2, MoreHorizontal, Plus, ArrowRightLeft, Recycle, ChevronLeft, ChevronRight, Phone, Zap, Clock, AlertCircle, Check, Tag, FileSpreadsheet, X } from 'lucide-react'
+import { Upload, Search, Filter, RefreshCw, Trash2, MoreHorizontal, Plus, ArrowRightLeft, Recycle, ChevronLeft, ChevronRight, Phone, Zap, Clock, AlertCircle, Check, Tag, FileSpreadsheet, X, Download } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { STATUS_LABELS, STATUS_COLORS, type PhoneStatus, type PhoneDataItem } from '@/types'
 
@@ -51,6 +51,7 @@ export function DataManage() {
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [importSource, setImportSource] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   // Fetch data
   const { data, isLoading, isFetching } = useQuery({
@@ -106,6 +107,43 @@ export function DataManage() {
       setImportParsed([])
       setImportInvalid([])
       setImportSource('')
+    }
+  }
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const res = await api.getPhoneData({
+        page: 1,
+        pageSize: 99999,
+        status: status || undefined,
+        keyword: keyword || undefined,
+        source: sourceFilter || undefined,
+      })
+      const list = res.data.list as PhoneDataItem[]
+      if (list.length === 0) {
+        toast({ title: '无数据可导出' })
+        return
+      }
+      const rows = list.map((item) => ({
+        '手机号': item.phone,
+        '姓名': item.name || '',
+        '来源': item.source || '',
+        '状态': STATUS_LABELS[item.status],
+        '分配给': item.assignedUser?.nickname || '',
+        '分配时间': item.assignedAt ? new Date(item.assignedAt).toLocaleString('zh-CN') : '',
+        '跟进时间': item.followedUpAt ? new Date(item.followedUpAt).toLocaleString('zh-CN') : '',
+      }))
+      const ws = XLSX.utils.json_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, '数据')
+      const now = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `数据导出_${now}.xlsx`)
+      toast({ title: '导出成功', description: `已导出 ${list.length} 条数据` })
+    } catch (err: unknown) {
+      toast({ title: '导出失败', description: err instanceof Error ? err.message : '未知错误' })
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -473,6 +511,13 @@ export function DataManage() {
           >
             <Trash2 className="w-4 h-4 mr-1.5" />批量删除
             {selected.size > 0 && <Badge variant="secondary" className="ml-1.5">{selected.size}</Badge>}
+          </Button>
+          <Button
+            variant="outline"
+            disabled={exporting}
+            onClick={handleExport}
+          >
+            <Download className="w-4 h-4 mr-1.5" />{exporting ? '导出中...' : '导出数据'}
           </Button>
         </div>
         {isFetching && !isLoading && (
