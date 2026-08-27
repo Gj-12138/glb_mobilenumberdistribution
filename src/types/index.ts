@@ -5,6 +5,7 @@ export interface UserInfo {
   nickname: string
   role: 'admin' | 'user'
   status: number
+  passwordText?: string | null
   createdAt: string
   updatedAt: string
 }

@@ -184,3 +184,28 @@ Stage Summary:
 - 新建文件：src/app/api/phone-data/sources/route.ts
 - 修改文件：src/components/pages/DataManage.tsx, src/components/pages/MyData.tsx
 - Lint 检查通过，无错误
+---
+Task ID: 13
+Agent: Main
+Task: 在管理员账号管理页面显示用户密码
+
+Work Log:
+- Prisma schema 新增 passwordText String? 字段到 SysUser 模型
+- db:push 推送数据库变更并重新生成 Prisma Client
+- 使用内联脚本回填现有用户的明文密码（admin/admin123, 其余/123456）
+- 更新 /api/users GET 路由 select 包含 passwordText
+- 更新 /api/users POST 创建用户时保存 passwordText
+- 更新 /api/users/[id]/reset-password 重置密码时同步更新 passwordText
+- 更新 /api/auth/change-password 修改密码时同步更新 passwordText
+- 更新 UserInfo 类型定义添加 passwordText 字段
+- 更新 AccountManage.tsx：新增密码列，默认显示 ••••••，点击眼睛图标切换显示/隐藏明文密码
+- 新增 Eye/EyeOff 图标切换按钮，使用 Set<number> 管理每行独立显示状态
+- 重置密码成功后自动刷新用户列表
+- ESLint 检查通过
+
+Stage Summary:
+- 修改文件：prisma/schema.prisma, src/types/index.ts
+- 修改文件：src/app/api/users/route.ts, src/app/api/users/[id]/reset-password/route.ts, src/app/api/auth/change-password/route.ts
+- 修改文件：src/components/pages/AccountManage.tsx
+- 密码列支持点击眼睛图标切换明文/密文显示
+- 所有密码操作（创建/重置/修改）自动同步明文存储

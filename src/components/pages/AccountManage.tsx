@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Plus, Search, RefreshCw, Trash2, Edit, ChevronLeft, ChevronRight, Shield } from 'lucide-react'
+import { Plus, Search, RefreshCw, Trash2, Edit, ChevronLeft, ChevronRight, Shield, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/store/auth-store'
 import type { UserInfo } from '@/types'
@@ -42,6 +42,7 @@ export function AccountManage() {
   const [resetUser, setResetUser] = useState<UserInfo | null>(null)
   const [resetPassword, setResetPassword] = useState('')
   const [deleteUser, setDeleteUser] = useState<UserInfo | null>(null)
+  const [showPasswords, setShowPasswords] = useState<Set<number>>(new Set())
 
   // Fetch users
   const { data, isLoading, isFetching } = useQuery({
@@ -97,6 +98,7 @@ export function AccountManage() {
       setResetPwOpen(false)
       setResetUser(null)
       setResetPassword('')
+      queryClient.invalidateQueries({ queryKey: ['users'] })
     },
     onError: (err: Error) => {
       toast({ title: '密码重置失败', description: err.message })
@@ -181,6 +183,7 @@ export function AccountManage() {
             <thead className="sticky top-0 bg-card z-10">
               <tr className="border-b border-border">
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">用户名</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">密码</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">昵称</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">角色</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">状态</th>
@@ -194,6 +197,7 @@ export function AccountManage() {
                   <tr key={i}>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
@@ -202,7 +206,7 @@ export function AccountManage() {
                 ))
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-16 text-center text-muted-foreground">
                     暂无数据
                   </td>
                 </tr>
@@ -210,6 +214,25 @@ export function AccountManage() {
                 items.map((item: UserInfo) => (
                   <tr key={item.id}>
                     <td className="px-4 py-3 text-sm font-medium">{item.username}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="phone-mono text-sm">
+                          {showPasswords.has(item.id) ? (item.passwordText || '-') : '••••••'}
+                        </span>
+                        <button
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => {
+                            const next = new Set(showPasswords)
+                            if (next.has(item.id)) { next.delete(item.id) } else { next.add(item.id) }
+                            setShowPasswords(next)
+                          }}
+                        >
+                          {showPasswords.has(item.id)
+                            ? <EyeOff className="w-3.5 h-3.5" />
+                            : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm">{item.nickname}</td>
                     <td className="px-4 py-3">
                       <Badge variant={item.role === 'admin' ? 'default' : 'secondary'} className="gap-1">

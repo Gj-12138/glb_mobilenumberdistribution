@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
     await db.sysUser.update({
       where: { id: payload.userId },
-      data: { password: hashSync(newPassword, 10) },
+      data: { password: hashSync(newPassword, 10), passwordText: newPassword },
     })
 
     await createLog(payload.userId, payload.nickname, 'change_password', `用户 ${payload.username} 修改了密码`)

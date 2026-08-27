@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     const [list, total] = await Promise.all([
       db.sysUser.findMany({
         where,
-        select: { id: true, username: true, nickname: true, role: true, status: true, createdAt: true, updatedAt: true },
+        select: { id: true, username: true, nickname: true, role: true, status: true, passwordText: true, createdAt: true, updatedAt: true },
         skip,
         take: pageSize,
         orderBy: { id: 'asc' },
@@ -74,10 +74,11 @@ export async function POST(request: Request) {
       data: {
         username,
         password: hashSync(password, 10),
+        passwordText: password,
         nickname,
         role: role || 'user',
       },
-      select: { id: true, username: true, nickname: true, role: true, status: true, createdAt: true },
+      select: { id: true, username: true, nickname: true, role: true, status: true, passwordText: true, createdAt: true },
     })
 
     await createLog(payload.userId, payload.nickname, 'create_user', `创建用户 ${username}`)

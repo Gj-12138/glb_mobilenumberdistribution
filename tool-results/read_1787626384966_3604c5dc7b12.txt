@@ -1,0 +1,663 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useCallback } from 'react'
+     4→     4→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+     5→     5→import { api } from '@/api/client'
+     6→     6→import { Button } from '@/components/ui/button'
+     7→     7→import { Input } from '@/components/ui/input'
+     8→     8→import { Card, CardContent } from '@/components/ui/card'
+     9→     9→import { Checkbox } from '@/components/ui/checkbox'
+    10→    10→import { Badge } from '@/components/ui/badge'
+    11→    11→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    12→    12→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+    13→    13→import { Textarea } from '@/components/ui/textarea'
+    14→    14→import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+    15→    15→import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+    16→    16→import { Skeleton } from '@/components/ui/skeleton'
+    17→    17→import { Upload, Search, Filter, RefreshCw, Trash2, MoreHorizontal, Plus, ArrowRightLeft, Recycle, ChevronLeft, ChevronRight, Phone, Zap, Clock, AlertCircle, Check, Tag } from 'lucide-react'
+    18→    18→import { useToast } from '@/hooks/use-toast'
+    19→    19→import { STATUS_LABELS, STATUS_COLORS, type PhoneStatus, type PhoneDataItem } from '@/types'
+    20→    20→
+    21→    21→const PAGE_SIZE = 20
+    22→    22→
+    23→    23→const STATUS_OPTIONS = [
+    24→    24→  { value: '', label: '全部状态' },
+    25→    25→  { value: 'pending', label: '未跟进' },
+    26→    26→  { value: 'no_answer', label: '无人接听' },
+    27→    27→  { value: 'unreachable', label: '打不通' },
+    28→    28→  { value: 'connected', label: '已打通' },
+    29→    29→]
+    30→    30→
+    31→    31→export function DataManage() {
+    32→    32→  const { toast } = useToast()
+    33→    33→  const queryClient = useQueryClient()
+    34→    34→
+    35→    35→  const [page, setPage] = useState(1)
+    36→    36→  const [status, setStatus] = useState<PhoneStatus | ''>('')
+    37→    37→  const [keyword, setKeyword] = useState('')
+    38→    38→  const [searchInput, setSearchInput] = useState('')
+    39→    39→  const [selected, setSelected] = useState<Set<number>>(new Set())
+    40→    40→  const [importOpen, setImportOpen] = useState(false)
+    41→    41→  const [importText, setImportText] = useState('')
+    42→    42→  const [importParsed, setImportParsed] = useState<string[]>([])
+    43→    43→  const [importInvalid, setImportInvalid] = useState<string[]>([])
+    44→    44→  const [distributeOpen, setDistributeOpen] = useState(false)
+    45→    45→  const [distributeTo, setDistributeTo] = useState('')
+    46→    46→  const [batchStatusOpen, setBatchStatusOpen] = useState(false)
+    47→    47→  const [_batchStatus, setBatchStatus] = useState<PhoneStatus>('')
+    48→    48→  const [deleteOpen, setDeleteOpen] = useState(false)
+    49→    49→  const [deleteId, setDeleteId] = useState<number | null>(null)
+    50→    50→  const [importSource, setImportSource] = useState('')
+    51→    51→  const [sourceFilter, setSourceFilter] = useState('')
+    52→    52→
+    53→    53→  // Fetch data
+    54→    54→  const { data, isLoading, isFetching } = useQuery({
+    55→    55→    queryKey: ['phoneData', page, status, keyword, sourceFilter],
+    56→    56→    queryFn: () => api.getPhoneData({ page, pageSize: PAGE_SIZE, status: status || undefined, keyword: keyword || undefined, source: sourceFilter || undefined }),
+    57→    57→  })
+    58→    58→
+    59→    59→  // Fetch user options for distribute
+    60→    60→  const { data: userOptions } = useQuery({
+    61→    61→    queryKey: ['userOptions'],
+    62→    62→    queryFn: () => api.getUserOptions(),
+    63→    63→  })
+    64→    64→
+    65→    65→  // Fetch source options for filter
+    66→    66→  const { data: sourceOptions } = useQuery({
+    67→    67→    queryKey: ['sourceOptions'],
+    68→    68→    queryFn: () => api.getSourceOptions(),
+    69→    69→  })
+    70→    70→
+    71→    71→  // Stats query
+    72→    72→  const { data: statsData } = useQuery({
+    73→    73→    queryKey: ['phoneDataStats'],
+    74→    74→    queryFn: async () => {
+    75→    75→      const [all, pending, connected, unreachable] = await Promise.all([
+    76→    76→        api.getPhoneData({ page: 1, pageSize: 1 }),
+    77→    77→        api.getPhoneData({ page: 1, pageSize: 1, status: 'pending' }),
+    78→    78→        api.getPhoneData({ page: 1, pageSize: 1, status: 'connected' }),
+    79→    79→        api.getPhoneData({ page: 1, pageSize: 1, status: 'unreachable' }),
+    80→    80→      ])
+    81→    81→      return {
+    82→    82→        total: all.data.total,
+    83→    83→        pending: pending.data.total,
+    84→    84→        connected: connected.data.total,
+    85→    85→        unreachable: unreachable.data.total,
+    86→    86→      }
+    87→    87→    },
+    88→    88→  })
+    89→    89→
+    90→    90→  // Import mutation
+    91→    91→  const importMutation = useMutation({
+    92→    92→    mutationFn: ({ phones, source }: { phones: string[]; source?: string }) => api.importPhones(phones, source),
+    93→    93→    onSuccess: (res) => {
+    94→    94→      toast({ title: '导入成功', description: `成功导入 ${res.data.count} 条数据` })
+    95→    95→      setImportOpen(false)
+    96→    96→      setImportText('')
+    97→    97→      setImportParsed([])
+    98→    98→      setImportInvalid([])
+    99→    99→      setImportSource('')
+   100→   100→      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+   101→   101→      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+   102→   102→      queryClient.invalidateQueries({ queryKey: ['sourceOptions'] })
+   103→   103→    },
+   104→   104→    onError: (err: Error) => {
+   105→   105→      toast({ title: '导入失败', description: err.message })
+   106→   106→    },
+   107→   107→  })
+   108→   108→
+   109→   109→  const handleImport = () => {
+   110→   110→    importMutation.mutate({ phones: importParsed, source: importSource.trim() || undefined })
+   111→   111→  }
+   112→   112→
+   113→   113→  // Distribute mutation
+   114→   114→  const distributeMutation = useMutation({
+   115→   115→    mutationFn: ({ ids, assignedTo }: { ids: number[]; assignedTo: number }) => api.distributePhones(ids, assignedTo),
+   116→   116→    onSuccess: () => {
+   117→   117→      toast({ title: '分发成功', description: `已分发 ${selected.size} 条数据` })
+   118→   118→      setDistributeOpen(false)
+   119→   119→      setDistributeTo('')
+   120→   120→      setSelected(new Set())
+   121→   121→      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+   122→   122→      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+   123→   123→    },
+   124→   124→    onError: (err: Error) => {
+   125→   125→      toast({ title: '分发失败', description: err.message })
+   126→   126→    },
+   127→   127→  })
+   128→   128→
+   129→   129→  // Auto distribute mutation
+   130→   130→  const autoDistributeMutation = useMutation({
+   131→   131→    mutationFn: () => api.autoDistribute(),
+   132→   132→    onSuccess: () => {
+   133→   133→      toast({ title: '自动分发成功', description: '待分发数据已平均分配' })
+   134→   134→      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+   135→   135→      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+   136→   136→    },
+   137→   137→    onError: (err: Error) => {
+   138→   138→      toast({ title: '自动分发失败', description: err.message })
+   139→   139→    },
+   140→   140→  })
+   141→   141→
+   142→   142→  // Recycle mutation
+   143→   143→  const recycleMutation = useMutation({
+   144→   144→    mutationFn: (ids: number[]) => api.recyclePhones(ids),
+   145→   145→    onSuccess: () => {
+   146→   146→      toast({ title: '回收成功', description: `已回收 ${selected.size} 条数据` })
+   147→   147→      setSelected(new Set())
+   148→   148→      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+   149→   149→      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+   150→   150→    },
+   151→   151→    onError: (err: Error) => {
+   152→   152→      toast({ title: '回收失败', description: err.message })
+   153→   153→    },
+   154→   154→  })
+   155→   155→
+   156→   156→  // Update single status mutation
+   157→   157→  const updateStatusMutation = useMutation({
+   158→   158→    mutationFn: ({ id, status }: { id: number; status: string }) => api.updatePhoneStatus(id, status),
+   159→   159→    onSuccess: () => {
+   160→   160→      toast({ title: '状态更新成功' })
+   161→   161→      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+   162→   162→      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+   163→   163→    },
+   164→   164→    onError: (err: Error) => {
+   165→   165→      toast({ title: '状态更新失败', description: err.message })
+   166→   166→    },
+   167→   167→  })
+   168→   168→
+   169→   169→  // Batch status update mutation
+   170→   170→  const batchStatusMutation = useMutation({
+   171→   171→    mutationFn: ({ ids, status }: { ids: number[]; status: string }) => api.batchUpdateStatus(ids, status),
+   172→   172→    onSuccess: () => {
+   173→   173→      toast({ title: '批量更新成功', description: `已更新 ${selected.size} 条数据状态` })
+   174→   174→      setBatchStatusOpen(false)
+   175→   175→      setBatchStatus('pending')
+   176→   176→      setSelected(new Set())
+   177→   177→      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+   178→   178→      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+   179→   179→    },
+   180→   180→    onError: (err: Error) => {
+   181→   181→      toast({ title: '批量更新失败', description: err.message })
+   182→   182→    },
+   183→   183→  })
+   184→   184→
+   185→   185→  // Delete mutation
+   186→   186→  const deleteMutation = useMutation({
+   187→   187→    mutationFn: (id: number) => api.deletePhoneData(id),
+   188→   188→    onSuccess: () => {
+   189→   189→      toast({ title: '删除成功' })
+   190→   190→      setDeleteOpen(false)
+   191→   191→      setDeleteId(null)
+   192→   192→      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+   193→   193→      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+   194→   194→    },
+   195→   195→    onError: (err: Error) => {
+   196→   196→      toast({ title: '删除失败', description: err.message })
+   197→   197→    },
+   198→   198→  })
+   199→   199→
+   200→   200→  const handleSearch = () => {
+   201→   201→    setKeyword(searchInput)
+   202→   202→    setPage(1)
+   203→   203→    setSelected(new Set())
+   204→   204→  }
+   205→   205→
+   206→   206→  const handleStatusFilter = (val: string) => {
+   207→   207→    setStatus(val === '_all' ? '' : (val as PhoneStatus))
+   208→   208→    setPage(1)
+   209→   209→    setSelected(new Set())
+   210→   210→  }
+   211→   211→
+   212→   212→  const handleSourceFilter = (val: string) => {
+   213→   213→    setSourceFilter(val === '_all' ? '' : val)
+   214→   214→    setPage(1)
+   215→   215→    setSelected(new Set())
+   216→   216→  }
+   217→   217→
+   218→   218→  const handleReset = () => {
+   219→   219→    setStatus('')
+   220→   220→    setKeyword('')
+   221→   221→    setSearchInput('')
+   222→   222→    setSourceFilter('')
+   223→   223→    setPage(1)
+   224→   224→    setSelected(new Set())
+   225→   225→  }
+   226→   226→
+   227→   227→  const parseImportText = useCallback((text: string) => {
+   228→   228→    const lines = text.split(/[\n,;\s]+/).filter((l) => l.trim())
+   229→   229→    const valid: string[] = []
+   230→   230→    const invalid: string[] = []
+   231→   231→    lines.forEach((l) => {
+   232→   232→      const p = l.trim()
+   233→   233→      if (/^1\d{10}$/.test(p)) {
+   234→   234→        valid.push(p)
+   235→   235→      } else {
+   236→   236→        invalid.push(p)
+   237→   237→      }
+   238→   238→    })
+   239→   239→    setImportParsed(valid)
+   240→   240→    setImportInvalid(invalid)
+   241→   241→  }, [])
+   242→   242→
+   243→   243→  const handleImportTextChange = (text: string) => {
+   244→   244→    setImportText(text)
+   245→   245→    parseImportText(text)
+   246→   246→  }
+   247→   247→
+   248→   248→  const toggleSelectAll = () => {
+   249→   249→    if (!data?.data.list) return
+   250→   250→    const allIds = data.data.list.map((d: PhoneDataItem) => d.id)
+   251→   251→    if (selected.size === allIds.length) {
+   252→   252→      setSelected(new Set())
+   253→   253→    } else {
+   254→   254→      setSelected(new Set(allIds))
+   255→   255→    }
+   256→   256→  }
+   257→   257→
+   258→   258→  const toggleSelect = (id: number) => {
+   259→   259→    const next = new Set(selected)
+   260→   260→    if (next.has(id)) {
+   261→   261→      next.delete(id)
+   262→   262→    } else {
+   263→   263→      next.add(id)
+   264→   264→    }
+   265→   265→    setSelected(next)
+   266→   266→  }
+   267→   267→
+   268→   268→  const totalPages = data?.data ? Math.max(1, Math.ceil(data.data.total / PAGE_SIZE)) : 1
+   269→   269→  const items = (data?.data?.list || []) as PhoneDataItem[]
+   270→   270→
+   271→   271→  const stats = statsData?.data || { total: 0, pending: 0, connected: 0, unreachable: 0 }
+   272→   272→
+   273→   273→  return (
+   274→   274→    <div className="space-y-6">
+   275→   275→      {/* Stats cards */}
+   276→   276→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   277→   277→        <Card>
+   278→   278→          <CardContent className="p-4 flex items-center gap-4">
+   279→   279→            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+   280→   280→              <Phone className="w-5 h-5 text-primary" />
+   281→   281→            </div>
+   282→   282→            <div>
+   283→   283→              <p className="text-sm text-muted-foreground">总数据</p>
+   284→   284→              <p className="text-2xl font-bold">{stats.total}</p>
+   285→   285→            </div>
+   286→   286→          </CardContent>
+   287→   287→        </Card>
+   288→   288→        <Card>
+   289→   289→          <CardContent className="p-4 flex items-center gap-4">
+   290→   290→            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+   291→   291→              <Clock className="w-5 h-5 text-slate-600" />
+   292→   292→            </div>
+   293→   293→            <div>
+   294→   294→              <p className="text-sm text-muted-foreground">未跟进</p>
+   295→   295→              <p className="text-2xl font-bold">{stats.pending}</p>
+   296→   296→            </div>
+   297→   297→          </CardContent>
+   298→   298→        </Card>
+   299→   299→        <Card>
+   300→   300→          <CardContent className="p-4 flex items-center gap-4">
+   301→   301→            <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+   302→   302→              <Check className="w-5 h-5 text-emerald-600" />
+   303→   303→            </div>
+   304→   304→            <div>
+   305→   305→              <p className="text-sm text-muted-foreground">已打通</p>
+   306→   306→              <p className="text-2xl font-bold">{stats.connected}</p>
+   307→   307→            </div>
+   308→   308→          </CardContent>
+   309→   309→        </Card>
+   310→   310→        <Card>
+   311→   311→          <CardContent className="p-4 flex items-center gap-4">
+   312→   312→            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
+   313→   313→              <AlertCircle className="w-5 h-5 text-red-600" />
+   314→   314→            </div>
+   315→   315→            <div>
+   316→   316→              <p className="text-sm text-muted-foreground">打不通</p>
+   317→   317→              <p className="text-2xl font-bold">{stats.unreachable}</p>
+   318→   318→            </div>
+   319→   319→          </CardContent>
+   320→   320→        </Card>
+   321→   321→      </div>
+   322→   322→
+   323→   323→      {/* Filters */}
+   324→   324→      <Card>
+   325→   325→        <CardContent className="p-4">
+   326→   326→          <div className="flex flex-col sm:flex-row gap-3">
+   327→   327→            <Select value={status} onValueChange={handleStatusFilter}>
+   328→   328→              <SelectTrigger className="w-full sm:w-36">
+   329→   329→                <SelectValue placeholder="全部状态" />
+   330→   330→              </SelectTrigger>
+   331→   331→              <SelectContent>
+   332→   332→                {STATUS_OPTIONS.map((o) => (
+   333→   333→                  <SelectItem key={o.value} value={o.value || '_all'}>{o.label}</SelectItem>
+   334→   334→                ))}
+   335→   335→              </SelectContent>
+   336→   336→            </Select>
+   337→   337→            <Select value={sourceFilter || '_all'} onValueChange={handleSourceFilter}>
+   338→   338→              <SelectTrigger className="w-full sm:w-36">
+   339→   339→                <SelectValue placeholder="全部来源" />
+   340→   340→              </SelectTrigger>
+   341→   341→              <SelectContent>
+   342→   342→                <SelectItem value="_all">全部来源</SelectItem>
+   343→   343→                {(sourceOptions?.data || []).map((s: string) => (
+   344→   344→                  <SelectItem key={s} value={s}>{s}</SelectItem>
+   345→   345→                ))}
+   346→   346→              </SelectContent>
+   347→   347→            </Select>
+   348→   348→            <div className="flex-1 flex gap-2">
+   349→   349→              <Input
+   350→   350→                placeholder="搜索手机号或姓名..."
+   351→   351→                value={searchInput}
+   352→   352→                onChange={(e) => setSearchInput(e.target.value)}
+   353→   353→                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+   354→   354→                className="flex-1"
+   355→   355→              />
+   356→   356→              <Button variant="outline" onClick={handleSearch} size="default">
+   357→   357→                <Search className="w-4 h-4 mr-1.5" />搜索
+   358→   358→              </Button>
+   359→   359→              <Button variant="ghost" onClick={handleReset} size="default">
+   360→   360→                <RefreshCw className="w-4 h-4" />
+   361→   361→              </Button>
+   362→   362→            </div>
+   363→   363→          </div>
+   364→   364→        </CardContent>
+   365→   365→      </Card>
+   366→   366→
+   367→   367→      {/* Actions bar */}
+   368→   368→      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+   369→   369→        <div className="flex flex-wrap gap-2">
+   370→   370→          <Button onClick={() => { setImportText(''); setImportParsed([]); setImportInvalid([]); setImportSource(''); setImportOpen(true) }}>
+   371→   371→            <Upload className="w-4 h-4 mr-1.5" />导入数据
+   372→   372→          </Button>
+   373→   373→          <Button variant="outline" onClick={() => autoDistributeMutation.mutate()} disabled={autoDistributeMutation.isPending}>
+   374→   374→            <Zap className="w-4 h-4 mr-1.5" />自动分发
+   375→   375→          </Button>
+   376→   376→          <Button
+   377→   377→            variant="outline"
+   378→   378→            disabled={selected.size === 0}
+   379→   379→            onClick={() => { setDistributeTo(''); setDistributeOpen(true) }}
+   380→   380→          >
+   381→   381→            <ArrowRightLeft className="w-4 h-4 mr-1.5" />分发
+   382→   382→            {selected.size > 0 && <Badge variant="secondary" className="ml-1.5">{selected.size}</Badge>}
+   383→   383→          </Button>
+   384→   384→          <Button
+   385→   385→            variant="outline"
+   386→   386→            disabled={selected.size === 0}
+   387→   387→            onClick={() => recycleMutation.mutate(Array.from(selected))}
+   388→   388→          >
+   389→   389→            <Recycle className="w-4 h-4 mr-1.5" />回收
+   390→   390→            {selected.size > 0 && <Badge variant="secondary" className="ml-1.5">{selected.size}</Badge>}
+   391→   391→          </Button>
+   392→   392→          <DropdownMenu open={batchStatusOpen} onOpenChange={setBatchStatusOpen}>
+   393→   393→            <DropdownMenuTrigger asChild>
+   394→   394→              <Button variant="outline" disabled={selected.size === 0}>
+   395→   395→                <Filter className="w-4 h-4 mr-1.5" />批量状态
+   396→   396→                {selected.size > 0 && <Badge variant="secondary" className="ml-1.5">{selected.size}</Badge>}
+   397→   397→              </Button>
+   398→   398→            </DropdownMenuTrigger>
+   399→   399→            <DropdownMenuContent align="start">
+   400→   400→              {(['pending', 'no_answer', 'unreachable', 'connected'] as PhoneStatus[]).map((s) => (
+   401→   401→                <DropdownMenuItem
+   402→   402→                  key={s}
+   403→   403→                  onClick={() => batchStatusMutation.mutate({ ids: Array.from(selected), status: s })}
+   404→   404→                  disabled={batchStatusMutation.isPending}
+   405→   405→                >
+   406→   406→                  {STATUS_LABELS[s]}
+   407→   407→                </DropdownMenuItem>
+   408→   408→              ))}
+   409→   409→            </DropdownMenuContent>
+   410→   410→          </DropdownMenu>
+   411→   411→        </div>
+   412→   412→        {isFetching && !isLoading && (
+   413→   413→          <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+   414→   414→            <RefreshCw className="w-3 h-3 animate-spin" />刷新中...
+   415→   415→          </span>
+   416→   416→        )}
+   417→   417→      </div>
+   418→   418→
+   419→   419→      {/* Table */}
+   420→   420→      <Card>
+   421→   421→        <div className="max-h-[calc(100vh-320px)] overflow-y-auto custom-scrollbar">
+   422→   422→          <table className="w-full data-table">
+   423→   423→            <thead className="sticky top-0 bg-card z-10">
+   424→   424→              <tr className="border-b border-border">
+   425→   425→                <th className="w-12 px-4 py-3 text-left">
+   426→   426→                  <Checkbox
+   427→   427→                    checked={items.length > 0 && selected.size === items.length}
+   428→   428→                    onCheckedChange={toggleSelectAll}
+   429→   429→                  />
+   430→   430→                </th>
+   431→   431→                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">手机号</th>
+   432→   432→                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">姓名</th>
+   433→   433→                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">来源</th>
+   434→   434→                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">状态</th>
+   435→   435→                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">分配给</th>
+   436→   436→                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">分配时间</th>
+   437→   437→                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">跟进时间</th>
+   438→   438→                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">操作</th>
+   439→   439→              </tr>
+   440→   440→            </thead>
+   441→   441→            <tbody className="divide-y divide-border">
+   442→   442→              {isLoading ? (
+   443→   443→                Array.from({ length: 5 }).map((_, i) => (
+   444→   444→                  <tr key={i}>
+   445→   445→                    <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
+   446→   446→                    <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
+   447→   447→                    <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+   448→   448→                    <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+   449→   449→                    <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
+   450→   450→                    <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+   451→   451→                    <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
+   452→   452→                    <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
+   453→   453→                    <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+   454→   454→                  </tr>
+   455→   455→                ))
+   456→   456→              ) : items.length === 0 ? (
+   457→   457→                <tr>
+   458→   458→                  <td colSpan={9} className="px-4 py-16 text-center text-muted-foreground">
+   459→   459→                    暂无数据
+   460→   460→                  </td>
+   461→   461→                </tr>
+   462→   462→              ) : (
+   463→   463→                items.map((item: PhoneDataItem) => (
+   464→   464→                  <tr key={item.id} className={selected.has(item.id) ? 'bg-primary/5' : ''}>
+   465→   465→                    <td className="px-4 py-3">
+   466→   466→                      <Checkbox
+   467→   467→                        checked={selected.has(item.id)}
+   468→   468→                        onCheckedChange={() => toggleSelect(item.id)}
+   469→   469→                      />
+   470→   470→                    </td>
+   471→   471→                    <td className="px-4 py-3">
+   472→   472→                      <span className="phone-mono text-sm">{item.phone}</span>
+   473→   473→                    </td>
+   474→   474→                    <td className="px-4 py-3 text-sm">{item.name || '-'}</td>
+   475→   475→                    <td className="px-4 py-3">
+   476→   476→                      {item.source ? (
+   477→   477→                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200">
+   478→   478→                          <Tag className="w-3 h-3" />{item.source}
+   479→   479→                        </span>
+   480→   480→                      ) : '-'}
+   481→   481→                    </td>
+   482→   482→                    <td className="px-4 py-3">
+   483→   483→                      <span className={STATUS_COLORS[item.status] + ' px-2.5 py-0.5 rounded-full text-xs font-medium'}>
+   484→   484→                        {STATUS_LABELS[item.status]}
+   485→   485→                      </span>
+   486→   486→                    </td>
+   487→   487→                    <td className="px-4 py-3 text-sm">{item.assignedUser?.nickname || '-'}</td>
+   488→   488→                    <td className="px-4 py-3 text-xs text-muted-foreground">
+   489→   489→                      {item.assignedAt ? new Date(item.assignedAt).toLocaleString('zh-CN') : '-'}
+   490→   490→                    </td>
+   491→   491→                    <td className="px-4 py-3 text-xs text-muted-foreground">
+   492→   492→                      {item.followedUpAt ? new Date(item.followedUpAt).toLocaleString('zh-CN') : '-'}
+   493→   493→                    </td>
+   494→   494→                    <td className="px-4 py-3 text-right">
+   495→   495→                      <div className="flex items-center justify-end gap-1">
+   496→   496→                        <DropdownMenu>
+   497→   497→                          <DropdownMenuTrigger asChild>
+   498→   498→                            <Button variant="ghost" size="sm" className="h-8 px-2">
+   499→   499→                              <Filter className="w-3.5 h-3.5" />
+   500→   500→                            </Button>
+   501→   501→                          </DropdownMenuTrigger>
+   502→   502→                          <DropdownMenuContent align="end">
+   503→   503→                            {(['pending', 'no_answer', 'unreachable', 'connected'] as PhoneStatus[]).map((s) => (
+   504→   504→                              <DropdownMenuItem
+   505→   505→                                key={s}
+   506→   506→                                onClick={() => updateStatusMutation.mutate({ id: item.id, status: s })}
+   507→   507→                                disabled={updateStatusMutation.isPending}
+   508→   508→                              >
+   509→   509→                                {STATUS_LABELS[s]}
+   510→   510→                              </DropdownMenuItem>
+   511→   511→                            ))}
+   512→   512→                          </DropdownMenuContent>
+   513→   513→                        </DropdownMenu>
+   514→   514→                        <Button
+   515→   515→                          variant="ghost"
+   516→   516→                          size="sm"
+   517→   517→                          className="h-8 px-2 text-destructive hover:text-destructive"
+   518→   518→                          onClick={() => { setDeleteId(item.id); setDeleteOpen(true) }}
+   519→   519→                        >
+   520→   520→                          <Trash2 className="w-3.5 h-3.5" />
+   521→   521→                        </Button>
+   522→   522→                      </div>
+   523→   523→                    </td>
+   524→   524→                  </tr>
+   525→   525→                ))
+   526→   526→              )}
+   527→   527→            </tbody>
+   528→   528→          </table>
+   529→   529→        </div>
+   530→   530→
+   531→   531→        {/* Pagination */}
+   532→   532→        {!isLoading && data?.data && (
+   533→   533→          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+   534→   534→            <p className="text-sm text-muted-foreground">
+   535→   535→              共 {data.data.total} 条，第 {page}/{totalPages} 页
+   536→   536→            </p>
+   537→   537→            <div className="flex items-center gap-1">
+   538→   538→              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => { setPage(page - 1); setSelected(new Set()) }}>
+   539→   539→                <ChevronLeft className="w-4 h-4" />
+   540→   540→              </Button>
+   541→   541→              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+   542→   542→                let pageNum: number
+   543→   543→                if (totalPages <= 5) {
+   544→   544→                  pageNum = i + 1
+   545→   545→                } else if (page <= 3) {
+   546→   546→                  pageNum = i + 1
+   547→   547→                } else if (page >= totalPages - 2) {
+   548→   548→                  pageNum = totalPages - 4 + i
+   549→   549→                } else {
+   550→   550→                  pageNum = page - 2 + i
+   551→   551→                }
+   552→   552→                return (
+   553→   553→                  <Button
+   554→   554→                    key={pageNum}
+   555→   555→                    variant={page === pageNum ? 'default' : 'outline'}
+   556→   556→                    size="sm"
+   557→   557→                    className="w-8 h-8 p-0"
+   558→   558→                    onClick={() => { setPage(pageNum); setSelected(new Set()) }}
+   559→   559→                  >
+   560→   560→                    {pageNum}
+   561→   561→                  </Button>
+   562→   562→                )
+   563→   563→              })}
+   564→   564→              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => { setPage(page + 1); setSelected(new Set()) }}>
+   565→   565→                <ChevronRight className="w-4 h-4" />
+   566→   566→              </Button>
+   567→   567→            </div>
+   568→   568→          </div>
+   569→   569→        )}
+   570→   570→      </Card>
+   571→   571→
+   572→   572→      {/* Import Dialog */}
+   573→   573→      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+   574→   574→        <DialogContent className="sm:max-w-lg">
+   575→   575→          <DialogHeader>
+   576→   576→            <DialogTitle>导入手机号数据</DialogTitle>
+   577→   577→            <DialogDescription>粘贴手机号，每行一个或用逗号分隔。系统将自动验证格式（11位手机号，以1开头）。</DialogDescription>
+   578→   578→          </DialogHeader>
+   579→   579→          <div className="space-y-3">
+   580→   580→            <div>
+   581→   581→              <label className="text-sm font-medium mb-1.5 block">来源标签</label>
+   582→   582→              <Input
+   583→   583→                placeholder="请输入数据来源，如：广告投放、老客户推荐..."
+   584→   584→                value={importSource}
+   585→   585→                onChange={(e) => setImportSource(e.target.value)}
+   586→   586→              />
+   587→   587→            </div>
+   588→   588→            <Textarea
+   589→   589→              placeholder="请输入手机号，每行一个或逗号分隔&#10;例如：&#10;13800138000&#10;13900139000,15012345678"
+   590→   590→              value={importText}
+   591→   591→              onChange={(e) => handleImportTextChange(e.target.value)}
+   592→   592→              className="min-h-[200px] font-mono text-sm"
+   593→   593→            />
+   594→   594→            {importText && (
+   595→   595→              <div className="flex gap-4 text-sm">
+   596→   596→                <span className="text-emerald-600">有效: {importParsed.length} 条</span>
+   597→   597→                {importInvalid.length > 0 && (
+   598→   598→                  <span className="text-red-600">无效: {importInvalid.length} 条</span>
+   599→   599→                )}
+   600→   600→              </div>
+   601→   601→            )}
+   602→   602→          </div>
+   603→   603→          <DialogFooter>
+   604→   604→            <Button variant="outline" onClick={() => setImportOpen(false)}>取消</Button>
+   605→   605→            <Button
+   606→   606→              onClick={handleImport}
+   607→   607→              disabled={importParsed.length === 0 || importMutation.isPending}
+   608→   608→            >
+   609→   609→              {importMutation.isPending ? '导入中...' : `确认导入 ${importParsed.length} 条`}
+   610→   610→            </Button>
+   611→   611→          </DialogFooter>
+   612→   612→        </DialogContent>
+   613→   613→      </Dialog>
+   614→   614→
+   615→   615→      {/* Distribute Dialog */}
+   616→   616→      <Dialog open={distributeOpen} onOpenChange={setDistributeOpen}>
+   617→   617→        <DialogContent className="sm:max-w-sm">
+   618→   618→          <DialogHeader>
+   619→   619→            <DialogTitle>分发数据</DialogTitle>
+   620→   620→            <DialogDescription>将选中的 {selected.size} 条数据分配给指定用户</DialogDescription>
+   621→   621→          </DialogHeader>
+   622→   622→          <div>
+   623→   623→            <Select value={distributeTo} onValueChange={setDistributeTo}>
+   624→   624→              <SelectTrigger>
+   625→   625→                <SelectValue placeholder="选择用户" />
+   626→   626→              </SelectTrigger>
+   627→   627→              <SelectContent>
+   628→   628→                {userOptions?.data?.map((u) => (
+   629→   629→                  <SelectItem key={u.id} value={String(u.id)}>{u.nickname}</SelectItem>
+   630→   630→                ))}
+   631→   631→              </SelectContent>
+   632→   632→            </Select>
+   633→   633→          </div>
+   634→   634→          <DialogFooter>
+   635→   635→            <Button variant="outline" onClick={() => setDistributeOpen(false)}>取消</Button>
+   636→   636→            <Button
+   637→   637→              onClick={() => distributeMutation.mutate({ ids: Array.from(selected), assignedTo: Number(distributeTo) })}
+   638→   638→              disabled={!distributeTo || distributeMutation.isPending}
+   639→   639→            >
+   640→   640→              {distributeMutation.isPending ? '分发中...' : '确认分发'}
+   641→   641→            </Button>
+   642→   642→          </DialogFooter>
+   643→   643→        </DialogContent>
+   644→   644→      </Dialog>
+   645→   645→
+   646→   646→      {/* Delete Confirmation */}
+   647→   647→      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+   648→   648→        <AlertDialogContent>
+   649→   649→          <AlertDialogHeader>
+   650→   650→            <AlertDialogTitle>确认删除</AlertDialogTitle>
+   651→   651→            <AlertDialogDescription>删除后数据无法恢复，确定要删除这条数据吗？</AlertDialogDescription>
+   652→   652→          </AlertDialogHeader>
+   653→   653→          <AlertDialogFooter>
+   654→   654→            <AlertDialogCancel>取消</AlertDialogCancel>
+   655→   655→            <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)} className="bg-destructive text-white hover:bg-destructive/90">
+   656→   656→              删除
+   657→   657→            </AlertDialogAction>
+   658→   658→          </AlertDialogFooter>
+   659→   659→        </AlertDialogContent>
+   660→   660→      </AlertDialog>
+   661→   661→    </div>
+   662→   662→  )
+   663→   663→}

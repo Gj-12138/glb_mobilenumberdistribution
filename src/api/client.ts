@@ -160,8 +160,23 @@ export const api = {
   deletePhoneData: (id: number) =>
     request(`/phone-data/${id}`, { method: 'DELETE' }),
 
+  batchDeletePhoneData: (ids: number[]) =>
+    request<{ count: number }>('/phone-data/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+
   getSourceOptions: () =>
     request<string[]>('/phone-data/sources'),
+
+  getPhoneDataStats: (params: { keyword?: string; source?: string } = {}) => {
+    const searchParams = new URLSearchParams()
+    if (params.keyword) searchParams.set('keyword', params.keyword)
+    if (params.source) searchParams.set('source', params.source)
+    return request<{ total: number; pending: number; connected: number; unreachable: number; noAnswer: number }>(
+      `/phone-data/stats?${searchParams.toString()}`
+    )
+  },
 
   // Logs
   getLogs: (params: import('@/types').LogListParams) => {

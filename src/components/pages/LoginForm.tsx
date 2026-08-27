@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuthStore } from '@/store/auth-store'
+import { useAuthStore, useAppStore } from '@/store/auth-store'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,6 +66,7 @@ export function LoginForm() {
     try {
       const res = await api.login(username.trim(), password)
       setAuth(res.data.token, res.data.user)
+      useAppStore.getState().setCurrentPage(res.data.user.role === 'admin' ? 'data-manage' : 'my-data')
       toast({ title: '登录成功', description: `欢迎回来，${res.data.user.nickname}` })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '登录失败'

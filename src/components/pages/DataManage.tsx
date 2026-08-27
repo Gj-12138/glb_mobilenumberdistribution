@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -10,11 +10,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
+import * as XLSX from 'xlsx'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Upload, Search, Filter, RefreshCw, Trash2, MoreHorizontal, Plus, ArrowRightLeft, Recycle, ChevronLeft, ChevronRight, Phone, Zap, Clock, AlertCircle, Check, Tag } from 'lucide-react'
+import { Upload, Search, Filter, RefreshCw, Trash2, MoreHorizontal, Plus, ArrowRightLeft, Recycle, ChevronLeft, ChevronRight, Phone, Zap, Clock, AlertCircle, Check, Tag, FileSpreadsheet, X } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { STATUS_LABELS, STATUS_COLORS, type PhoneStatus, type PhoneDataItem } from '@/types'
 
@@ -38,15 +38,17 @@ export function DataManage() {
   const [searchInput, setSearchInput] = useState('')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [importOpen, setImportOpen] = useState(false)
-  const [importText, setImportText] = useState('')
+  const [importFile, setImportFile] = useState<File | null>(null)
   const [importParsed, setImportParsed] = useState<string[]>([])
   const [importInvalid, setImportInvalid] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [distributeOpen, setDistributeOpen] = useState(false)
   const [distributeTo, setDistributeTo] = useState('')
   const [batchStatusOpen, setBatchStatusOpen] = useState(false)
   const [_batchStatus, setBatchStatus] = useState<PhoneStatus>('')
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [importSource, setImportSource] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
 
@@ -68,23 +70,10 @@ export function DataManage() {
     queryFn: () => api.getSourceOptions(),
   })
 
-  // Stats query
+  // Stats query (synced with keyword/source filters, single API call)
   const { data: statsData } = useQuery({
-    queryKey: ['phoneDataStats'],
-    queryFn: async () => {
-      const [all, pending, connected, unreachable] = await Promise.all([
-        api.getPhoneData({ page: 1, pageSize: 1 }),
-        api.getPhoneData({ page: 1, pageSize: 1, status: 'pending' }),
-        api.getPhoneData({ page: 1, pageSize: 1, status: 'connected' }),
-        api.getPhoneData({ page: 1, pageSize: 1, status: 'unreachable' }),
-      ])
-      return {
-        total: all.data.total,
-        pending: pending.data.total,
-        connected: connected.data.total,
-        unreachable: unreachable.data.total,
-      }
-    },
+    queryKey: ['phoneDataStats', keyword, sourceFilter],
+    queryFn: () => api.getPhoneDataStats({ keyword: keyword || undefined, source: sourceFilter || undefined }),
   })
 
   // Import mutation
@@ -93,7 +82,7 @@ export function DataManage() {
     onSuccess: (res) => {
       toast({ title: '导入成功', description: `成功导入 ${res.data.count} 条数据` })
       setImportOpen(false)
-      setImportText('')
+      setImportFile(null)
       setImportParsed([])
       setImportInvalid([])
       setImportSource('')
@@ -108,6 +97,16 @@ export function DataManage() {
 
   const handleImport = () => {
     importMutation.mutate({ phones: importParsed, source: importSource.trim() || undefined })
+  }
+
+  const handleImportDialogClose = (open: boolean) => {
+    setImportOpen(open)
+    if (!open) {
+      setImportFile(null)
+      setImportParsed([])
+      setImportInvalid([])
+      setImportSource('')
+    }
   }
 
   // Distribute mutation
@@ -197,6 +196,22 @@ export function DataManage() {
     },
   })
 
+  // Batch delete mutation
+  const batchDeleteMutation = useMutation({
+    mutationFn: (ids: number[]) => api.batchDeletePhoneData(ids),
+    onSuccess: (res) => {
+      toast({ title: '批量删除成功', description: `已删除 ${res.data.count} 条数据` })
+      setBatchDeleteOpen(false)
+      setSelected(new Set())
+      queryClient.invalidateQueries({ queryKey: ['phoneData'] })
+      queryClient.invalidateQueries({ queryKey: ['phoneDataStats'] })
+      queryClient.invalidateQueries({ queryKey: ['sourceOptions'] })
+    },
+    onError: (err: Error) => {
+      toast({ title: '批量删除失败', description: err.message })
+    },
+  })
+
   const handleSearch = () => {
     setKeyword(searchInput)
     setPage(1)
@@ -224,15 +239,14 @@ export function DataManage() {
     setSelected(new Set())
   }
 
-  const parseImportText = useCallback((text: string) => {
-    const lines = text.split(/[\n,;\s]+/).filter((l) => l.trim())
+  const parsePhones = useCallback((phones: (string | number)[]) => {
     const valid: string[] = []
     const invalid: string[] = []
-    lines.forEach((l) => {
-      const p = l.trim()
+    phones.forEach((raw) => {
+      const p = String(raw).trim()
       if (/^1\d{10}$/.test(p)) {
         valid.push(p)
-      } else {
+      } else if (p) {
         invalid.push(p)
       }
     })
@@ -240,9 +254,52 @@ export function DataManage() {
     setImportInvalid(invalid)
   }, [])
 
-  const handleImportTextChange = (text: string) => {
-    setImportText(text)
-    parseImportText(text)
+  const handleFileSelect = useCallback((file: File) => {
+    setImportFile(file)
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target!.result as ArrayBuffer)
+        const wb = XLSX.read(data, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows: (string | number)[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true })
+        // Extract all values from column A, flatten in case of nested arrays
+        const phones = rows.map((row) => row[0]).filter((v) => v !== undefined && v !== null)
+        parsePhones(phones)
+      } catch {
+        setImportParsed([])
+        setImportInvalid([])
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }, [parsePhones])
+
+  const handleDropZoneClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleFileSelect(file)
+    e.target.value = ''
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleFileSelect(file)
+  }
+
+  const clearFile = () => {
+    setImportFile(null)
+    setImportParsed([])
+    setImportInvalid([])
   }
 
   const toggleSelectAll = () => {
@@ -367,7 +424,7 @@ export function DataManage() {
       {/* Actions bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => { setImportText(''); setImportParsed([]); setImportInvalid([]); setImportSource(''); setImportOpen(true) }}>
+          <Button onClick={() => { setImportFile(null); setImportParsed([]); setImportInvalid([]); setImportSource(''); setImportOpen(true) }}>
             <Upload className="w-4 h-4 mr-1.5" />导入数据
           </Button>
           <Button variant="outline" onClick={() => autoDistributeMutation.mutate()} disabled={autoDistributeMutation.isPending}>
@@ -408,6 +465,15 @@ export function DataManage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="outline"
+            disabled={selected.size === 0}
+            onClick={() => setBatchDeleteOpen(true)}
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="w-4 h-4 mr-1.5" />批量删除
+            {selected.size > 0 && <Badge variant="secondary" className="ml-1.5">{selected.size}</Badge>}
+          </Button>
         </div>
         {isFetching && !isLoading && (
           <span className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -570,11 +636,11 @@ export function DataManage() {
       </Card>
 
       {/* Import Dialog */}
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+      <Dialog open={importOpen} onOpenChange={handleImportDialogClose}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>导入手机号数据</DialogTitle>
-            <DialogDescription>粘贴手机号，每行一个或用逗号分隔。系统将自动验证格式（11位手机号，以1开头）。</DialogDescription>
+            <DialogDescription>上传 Excel 文件（.xlsx / .xls），文件中仅包含手机号一列，无表头。</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -585,23 +651,57 @@ export function DataManage() {
                 onChange={(e) => setImportSource(e.target.value)}
               />
             </div>
-            <Textarea
-              placeholder="请输入手机号，每行一个或逗号分隔&#10;例如：&#10;13800138000&#10;13900139000,15012345678"
-              value={importText}
-              onChange={(e) => handleImportTextChange(e.target.value)}
-              className="min-h-[200px] font-mono text-sm"
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleFileInputChange}
             />
-            {importText && (
+            {!importFile ? (
+              <div
+                className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 flex flex-col items-center gap-3 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                onClick={handleDropZoneClick}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <FileSpreadsheet className="w-6 h-6 text-primary" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium">点击或拖拽上传 Excel 文件</p>
+                  <p className="text-xs text-muted-foreground mt-1">支持 .xlsx / .xls 格式</p>
+                </div>
+              </div>
+            ) : (
+              <div className="border rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{importFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{(importFile.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={clearFile}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            {importParsed.length > 0 && (
               <div className="flex gap-4 text-sm">
-                <span className="text-emerald-600">有效: {importParsed.length} 条</span>
+                <span className="text-emerald-600 font-medium">有效: {importParsed.length} 条</span>
                 {importInvalid.length > 0 && (
-                  <span className="text-red-600">无效: {importInvalid.length} 条</span>
+                  <span className="text-red-600 font-medium">无效: {importInvalid.length} 条</span>
                 )}
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setImportOpen(false)}>取消</Button>
+            <Button variant="outline" onClick={() => handleImportDialogClose(false)}>取消</Button>
             <Button
               onClick={handleImport}
               disabled={importParsed.length === 0 || importMutation.isPending}
@@ -654,6 +754,26 @@ export function DataManage() {
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)} className="bg-destructive text-white hover:bg-destructive/90">
               删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation */}
+      <AlertDialog open={batchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认批量删除</AlertDialogTitle>
+            <AlertDialogDescription>确定要删除选中的 {selected.size} 条数据吗？此操作不可撤销。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => batchDeleteMutation.mutate(Array.from(selected))}
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={batchDeleteMutation.isPending}
+            >
+              {batchDeleteMutation.isPending ? '删除中...' : '确认删除'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

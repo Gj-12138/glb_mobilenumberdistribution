@@ -34,7 +34,7 @@ export async function POST(
 
     await db.sysUser.update({
       where: { id: userId },
-      data: { password: hashSync(password, 10) },
+      data: { password: hashSync(password, 10), passwordText: password },
     })
 
     await createLog(payload.userId, payload.nickname, 'reset_password', `重置用户 ${user.username} 的密码`)
