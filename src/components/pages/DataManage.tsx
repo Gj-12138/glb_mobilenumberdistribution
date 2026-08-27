@@ -536,7 +536,7 @@ export function DataManage() {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className="phone-mono text-sm cursor-pointer select-text hover:text-primary transition-colors"
+                        className="phone-mono text-sm cursor-pointer select-none hover:text-primary transition-colors"
                         onDoubleClick={() => {
                           navigator.clipboard.writeText(item.phone).then(() => {
                             toast({ title: '已复制', description: item.phone })
