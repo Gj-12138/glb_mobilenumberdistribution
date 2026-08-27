@@ -50,5 +50,8 @@ test
 prompt
 
 server.log
+# Database (do not publish)
+/db/
+
 # Skills directory
 /skills/
