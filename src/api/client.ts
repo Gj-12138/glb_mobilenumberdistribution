@@ -178,6 +178,14 @@ export const api = {
     )
   },
 
+  getMyPhoneDataStats: (params: { keyword?: string } = {}) => {
+    const searchParams = new URLSearchParams()
+    if (params.keyword) searchParams.set('keyword', params.keyword)
+    return request<{ total: number; pending: number; connected: number; unreachable: number; noAnswer: number }>(
+      `/phone-data/my/stats?${searchParams.toString()}`
+    )
+  },
+
   // Logs
   getLogs: (params: import('@/types').LogListParams) => {
     const searchParams = new URLSearchParams()

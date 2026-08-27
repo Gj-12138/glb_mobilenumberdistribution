@@ -43,21 +43,8 @@ export function MyData() {
 
   // Stats query
   const { data: statsData } = useQuery({
-    queryKey: ['myPhoneDataStats'],
-    queryFn: async () => {
-      const [all, pending, connected, unreachable] = await Promise.all([
-        api.getMyPhoneData({ page: 1, pageSize: 1 }),
-        api.getMyPhoneData({ page: 1, pageSize: 1, status: 'pending' }),
-        api.getMyPhoneData({ page: 1, pageSize: 1, status: 'connected' }),
-        api.getMyPhoneData({ page: 1, pageSize: 1, status: 'unreachable' }),
-      ])
-      return {
-        total: all.data.total,
-        pending: pending.data.total,
-        connected: connected.data.total,
-        unreachable: unreachable.data.total,
-      }
-    },
+    queryKey: ['myPhoneDataStats', keyword],
+    queryFn: () => api.getMyPhoneDataStats({ keyword: keyword || undefined }),
   })
 
   // Update single status mutation
