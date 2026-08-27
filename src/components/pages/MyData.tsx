@@ -287,7 +287,17 @@ export function MyData() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <span className="phone-mono text-sm">{item.phone}</span>
+                      <span
+                        className="phone-mono text-sm cursor-pointer select-none hover:text-primary transition-colors"
+                        onDoubleClick={() => {
+                          navigator.clipboard.writeText(item.phone).then(() => {
+                            toast({ title: '已复制', description: item.phone })
+                          })
+                        }}
+                        title="双击复制"
+                      >
+                        {item.phone}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-sm">{item.name || '-'}</td>
                     <td className="px-4 py-3">
