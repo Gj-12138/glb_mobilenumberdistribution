@@ -1,6 +1,6 @@
 # 云服务器 Docker 部署方案（接入现有 nginx / /phone-data 子路径）
 
-目标：把手机号管理服务（Next.js + Prisma + SQLite）部署到腾讯云 `175.27.247.9`，通过你服务器上**已有 nginx(Docker 容器)**，以子路径 `https://weirunjob.cn/phone-data/` 对外提供。
+目标：把手机号管理服务（Next.js + Prisma + SQLite）部署到腾讯云 `175.27.247.9`，通过你服务器上**已装的系统 nginx（宿主机服务，非容器）**，以子路径 `https://weirunjob.cn/phone-data/` 对外提供。
 
 ## 0. 现状已确认（核实结论）
 
@@ -27,7 +27,7 @@ docker --version && docker compose version
 
 > 拉取慢就换腾讯云镜像源：`dnf config-manager --add-repo https://mirrors.cloud.tencent.com/docker-ce/linux/centos/docker-ce.repo`
 
-> 注意：你服务器上已有 nginx 容器在跑。安装 Docker 不会被动删除它；本服务独立容器 `phone-data-app`，互不冲突，只占本机端口 3000。
+> 注意：你服务器上已有**系统级 nginx** 在跑（宿主机服务）。安装 Docker 不会动它；本服务独立容器 `phone-data-app`，互不冲突，只占本机端口 3000，nginx 反代进来即可。
 
 ## 2. 获取代码
 
@@ -53,9 +53,9 @@ docker logs -f phone-data-app   # 看到 [entrypoint] Seed data created. 与 Rea
 curl -s "http://127.0.0.1:3000/phone-data/" -o /dev/null -w "%{http_code}\n"
 ```
 
-## 4. nginx(Docker 容器) 加一个反代 location
+## 4. nginx（服务器系统级，非容器）加一个反代 location
 
-在你现有 nginx 容器的 HTTPS server 块里（就是贴给我的那份 `/etc/nginx/conf.d/` 配置的 `server { listen 443 ssl; ... }`），在 `location /api/` 之后、`location /` （根路径）**之前**新增：
+你的 nginx 是装在服务器本机上的系统服务（不在 Docker 里）。就在你现有 HTTPS server 块里（即贴给我的那份 `/etc/nginx/conf.d/` 配置的 `server { listen 443 ssl; ... }`），在 `location /api/` 之后、`location /` （根路径）**之前**新增：
 
 ```nginx
 # ==========================================
@@ -74,14 +74,12 @@ location /phone-data/ {
 
 关键点：
 - `proxy_pass http://127.0.0.1:3000;` 末**不带**路径，保留 `/phone-data/...` 完整 URI 原样转给后端（与后端 basePath 对应）。
-- 因为 nginx 是 Docker 容器，`127.0.0.1:3000` 不是 nginx 容器的环回，而是**宿主机的** 3000。需要：
-  - 要么把 nginx 容器以 `--network host` 运行（这样容器内 127.0.0.1 就是宿主）；
-  - 要么在现有 compose 里给 nginx 加 `extra_hosts: ["host.docker.internal:host-gateway"]`，并把这里写成 `http://host.docker.internal:3000`。
-  - 执行前先确认你 nginx 容器的网络模式（`docker inspect <nginx容器> --format '{{.HostConfig.NetworkMode}}'`），通常 compose 默认 bridge，则用 `host.docker.internal` 方式。
+- nginx 是宿主机上装的系统服务，`127.0.0.1:3000` 直接就指向宿主机本机的 3000 —— 也就是手机号服务的 Docker 容器映射出来的端口（`127.0.0.1:3000:3000`），可直接连通，无需任何额外网络配置。
 
-改完重载 nginx：
+先校验配置再重载 nginx：
 ```bash
-docker exec <nginx容器名> nginx -s reload
+nginx -t                          # 测试配置是否有误
+systemctl reload nginx            # 或 nginx -s reload
 ```
 
 ## 5. 端口/安全组
