@@ -62,6 +62,17 @@ curl -s "http://127.0.0.1:3000/phone-data/" -o /dev/null -w "%{http_code}\n"
 # 手机号管理服务 - 通过 /phone-data/ 访问
 # 注意：必须放在 location / (根路径) 之前
 # ==========================================
+# ① 无尾斜杠的规范 URL：Next.js 会把 /phone-data/ 308 到 /phone-data（无尾斜杠），
+#    若不给它反代会落入下方 location / 造成 ERR_TOO_MANY_REDIRECTS 循环。
+location = /phone-data {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# ② 带尾斜杠的所有子路径
 location /phone-data/ {
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
