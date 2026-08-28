@@ -115,14 +115,24 @@ cd /root/glb_mobilenumberdistribution
 git pull
 docker compose up -d --build
 
-# 数据备份（卷里的 SQLite）
+# 数据备份（卷里的 SQLite）→ 生成 custom-db-backup-日期.tar.gz 到当前目录
+# 建议先 cd 到专门目录（如 mkdir -p /root/backup && cd /root/backup）再执行
 docker run --rm -v phone-data-db:/data -v $PWD:/backup \
   alpine tar czf /backup/custom-db-backup-$(date +%F).tar.gz -C /data custom.db
+
+# 数据恢复（用备份覆盖现有库，会先删除当前库，谨慎执行）
+docker run --rm -v phone-data-db:/data -v $PWD:/backup \
+  alpine sh -c "cd /data && rm -f custom.db && tar xzf /backup/custom-db-backup-2026-08-28.tar.gz"
 
 # 停止 / 重启（数据不丢）
 docker compose down
 docker compose restart
 ```
+
+备份说明：
+- 备份文件就是 `custom.db` 的压缩包，存在你执行命令时所在的目录（`$PWD`）。
+- **日常 `docker compose up -d --build` 重建镜像不会丢数据**（库在卷 `phone-data-db` 里，独立于镜像，entrypoint 检测到 `/data/custom.db` 存在就跳过重新初始化）。
+- 唯一要小心的场景：**修改 `prisma/schema.prisma`** 后重建，entrypoint 会执行 `prisma db push --accept-data-loss`——普通加列安全；若是破坏性结构变更（删列/改必填/改类型），`--accept-data-loss` 会**静默清空受影响表**。因此改 schema 前务必先备份。
 
 ## 8. 注意事项
 
