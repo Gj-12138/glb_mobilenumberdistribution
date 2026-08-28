@@ -1,13 +1,13 @@
 # ---- Stage 1: Install dependencies ----
-FROM node:20-alpine AS deps
-RUN corepack enable && corepack prepare bun@latest --activate
+FROM node:20 AS deps
+RUN npm install -g bun
 WORKDIR /app
 COPY package.json bun.lock* .
 RUN bun install --frozen-lockfile || npm install
 
 # ---- Stage 2: Build ----
-FROM node:20-alpine AS builder
-RUN corepack enable && corepack prepare bun@latest --activate
+FROM node:20 AS builder
+RUN npm install -g bun
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -20,8 +20,8 @@ RUN bunx prisma generate
 RUN bun run build
 
 # ---- Stage 3: Production ----
-FROM node:20-alpine AS runner
-RUN corepack enable && corepack prepare bun@latest --activate
+FROM node:20 AS runner
+RUN npm install -g bun
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -38,23 +38,23 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone .
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static .next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copy Prisma schema & client for migrations
+# Copy Prisma schema & seed script for migrations / initial data
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy full node_modules so entrypoint can run `prisma db push` (CLI) and
+# `prisma/seed.ts` (needs @prisma/client + bcryptjs) at runtime.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Data directory for SQLite (persistent volume)
 RUN mkdir -p /data && chown nextjs:nodejs /data
 
-# Create db directory for schema reference
-RUN mkdir -p /app/db && chown nextjs:nodejs /app/db
+# Copy & mark the entrypoint executable as root (before dropping privileges)
+COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 USER nextjs
 
 EXPOSE 3000
-
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]

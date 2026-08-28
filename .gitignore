@@ -55,3 +55,8 @@ server.log
 
 # Skills directory
 /skills/
+
+
+
+.reasonix/
+.zscripts/

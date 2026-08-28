@@ -18,5 +18,4 @@ tool-results/
 .env
 Dockerfile
 docker-compose.yml
-docker-entrypoint.sh
 README.md

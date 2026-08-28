@@ -10,9 +10,10 @@ services:
     environment:
       - DATABASE_URL=file:/data/custom.db
       - NODE_ENV=production
-      - JWT_SECRET=your-random-secret-change-me
+      - TZ=Asia/Shanghai
+      - JWT_SECRET=jlE8HeSnu7haQ4ZBgJNFCGTVosv01Riw
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
