@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    container_name: phone-data-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - app-data:/data
+    environment:
+      - DATABASE_URL=file:/data/custom.db
+      - NODE_ENV=production
+      - JWT_SECRET=your-random-secret-change-me
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  app-data:
+    name: phone-data-db
