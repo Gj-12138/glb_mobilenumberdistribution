@@ -4,7 +4,8 @@ services:
     container_name: phone-data-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # 仅本机监听，由云上 nginx 反代 /phone-data/ 对外（不直接暴露 3000 公网）
+      - "127.0.0.1:3000:3000"
     volumes:
       - app-data:/data
     environment:
@@ -13,7 +14,7 @@ services:
       - TZ=Asia/Shanghai
       - JWT_SECRET=jlE8HeSnu7haQ4ZBgJNFCGTVosv01Riw
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/phone-data/').then(r=>process.exit(r.ok||r.status===308?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,6 +1,6 @@
 import type { ApiResponse } from '@/types'
 
-const BASE = '/api'
+const BASE = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api`
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
